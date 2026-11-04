@@ -12,9 +12,13 @@ declare global {
       cylinderGeometry: any;
       coneGeometry: any;
       planeGeometry: any;
+      ringGeometry: any;
+      torusGeometry: any;
+      circleGeometry: any;
       meshStandardMaterial: any;
       meshBasicMaterial: any;
       meshPhongMaterial: any;
+      meshPhysicalMaterial: any;
       lineBasicMaterial: any;
       line: any;
       points: any;
@@ -37,6 +41,19 @@ declare global {
       grid: any;
       perspectiveCamera: any;
       orthographicCamera: any;
+      environment: any;
+      contactShadows: any;
+      softShadows: any;
+      sparkles: any;
+      float: any;
+      useTexture: any;
+      // postprocessing
+      effectComposer: any;
+      bloom: any;
+      vignette: any;
+      depthOfField: any;
+      toneMapping: any;
+      ssao: any;
     }
   }
 }

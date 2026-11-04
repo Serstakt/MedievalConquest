@@ -1,6 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, Sky, Stars } from '@react-three/drei';
+import { OrbitControls, Sky, Stars, Environment, ContactShadows, Sparkles } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, ToneMapping, SSAO } from '@react-three/postprocessing';
+import { ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { GameState, Position } from './types';
 import { Terrain, WaterPlane } from './Terrain';
@@ -16,6 +18,7 @@ interface GameSceneProps {
 function CameraController({ camera }: { camera: Position }) {
   const { camera: threeCamera } = useThree();
   const targetRef = useRef(new THREE.Vector3(camera.x, 0, camera.y));
+  const lookAtTarget = useRef(new THREE.Vector3(camera.x, 0, camera.y));
   
   useEffect(() => {
     targetRef.current.set(camera.x, 0, camera.y);
@@ -23,55 +26,106 @@ function CameraController({ camera }: { camera: Position }) {
 
   useFrame(() => {
     // Smooth camera follow
-    const currentTarget = new THREE.Vector3(
-      threeCamera.position.x,
-      threeCamera.position.y,
-      threeCamera.position.z
-    );
+    const desiredX = targetRef.current.x + 12;
+    const desiredY = 18;
+    const desiredZ = targetRef.current.z + 12;
     
-    // Calculate desired camera position (isometric-like)
-    const desiredX = targetRef.current.x + 15;
-    const desiredY = 20;
-    const desiredZ = targetRef.current.z + 15;
+    // Smooth lerp for position
+    threeCamera.position.x += (desiredX - threeCamera.position.x) * 0.04;
+    threeCamera.position.y += (desiredY - threeCamera.position.y) * 0.04;
+    threeCamera.position.z += (desiredZ - threeCamera.position.z) * 0.04;
     
-    // Smooth lerp
-    threeCamera.position.x += (desiredX - threeCamera.position.x) * 0.05;
-    threeCamera.position.y += (desiredY - threeCamera.position.y) * 0.05;
-    threeCamera.position.z += (desiredZ - threeCamera.position.z) * 0.05;
-    
-    threeCamera.lookAt(targetRef.current.x, 0, targetRef.current.z);
+    // Smooth look-at
+    lookAtTarget.current.lerp(targetRef.current, 0.06);
+    threeCamera.lookAt(lookAtTarget.current);
   });
 
   return null;
 }
 
+function Particles() {
+  return (
+    <>
+      {/* Dust particles around the map */}
+      <Sparkles 
+        count={100} 
+        scale={[80, 10, 60]} 
+        size={1.5} 
+        speed={0.3}
+        opacity={0.3}
+        color="#ffd700"
+      />
+    </>
+  );
+}
+
 function SceneContent({ gameState, onTileClick, onTileHover, onUnitClick }: GameSceneProps) {
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.4} />
+      {/* Enhanced Lighting */}
+      <ambientLight intensity={0.35} color="#b4c6e0" />
+      
+      {/* Main sun light with shadows */}
       <directionalLight
-        position={[50, 80, 30]}
-        intensity={1}
+        position={[40, 60, 30]}
+        intensity={1.2}
+        color="#fff5e6"
         castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-far={200}
-        shadow-camera-left={-50}
-        shadow-camera-right={50}
-        shadow-camera-top={50}
-        shadow-camera-bottom={-50}
+        shadow-mapSize={[4096, 4096]}
+        shadow-camera-far={150}
+        shadow-camera-left={-60}
+        shadow-camera-right={60}
+        shadow-camera-top={60}
+        shadow-camera-bottom={-60}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.02}
       />
-      <directionalLight position={[-30, 40, -20]} intensity={0.3} />
-      <hemisphereLight args={['#87CEEB', '#4a7c3f', 0.3]} />
+      
+      {/* Fill light */}
+      <directionalLight position={[-30, 30, -20]} intensity={0.3} color="#87CEEB" />
+      
+      {/* Rim light */}
+      <directionalLight position={[0, 20, -40]} intensity={0.2} color="#ff9500" />
+      
+      {/* Hemisphere light for natural ambient */}
+      <hemisphereLight args={['#87CEEB', '#4a7c3f', 0.4]} />
       
       {/* Sky */}
-      <Sky sunPosition={[100, 50, 100]} turbidity={8} rayleigh={2} />
-      <Stars radius={200} depth={50} count={2000} factor={4} fade speed={1} />
+      <Sky 
+        distance={450000}
+        sunPosition={[100, 40, 100]}
+        inclination={0.52}
+        azimuth={0.25}
+        turbidity={8}
+        rayleigh={2}
+        mieCoefficient={0.005}
+        mieDirectionalG={0.8}
+      />
       
-      {/* Fog */}
-      <fog attach="fog" args={['#87CEEB', 60, 120]} />
+      {/* Stars (subtle) */}
+      <Stars radius={200} depth={50} count={1000} factor={3} fade speed={0.5} />
       
-      {/* Water plane */}
+      {/* Fog for depth */}
+      <fog attach="fog" args={['#b4c6e0', 50, 100]} />
+      
+      {/* Environment map for reflections */}
+      <Environment preset="sunset" />
+      
+      {/* Contact shadows for grounding */}
+      <ContactShadows
+        position={[gameState.mapWidth / 2, 0, gameState.mapHeight / 2]}
+        opacity={0.4}
+        scale={80}
+        blur={2}
+        far={10}
+        resolution={512}
+        color="#000000"
+      />
+      
+      {/* Particles */}
+      <Particles />
+      
+      {/* Water */}
       <WaterPlane mapWidth={gameState.mapWidth} mapHeight={gameState.mapHeight} />
       
       {/* Terrain */}
@@ -92,19 +146,39 @@ function SceneContent({ gameState, onTileClick, onTileHover, onUnitClick }: Game
         onUnitClick={onUnitClick}
       />
       
-      {/* Camera controller */}
+      {/* Camera */}
       <CameraController camera={gameState.camera} />
       
-      {/* Orbit controls */}
+      {/* Controls */}
       <OrbitControls 
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
-        maxPolarAngle={Math.PI / 2.2}
+        maxPolarAngle={Math.PI / 2.1}
+        minPolarAngle={Math.PI / 8}
         minDistance={5}
-        maxDistance={60}
+        maxDistance={50}
+        panSpeed={1}
+        rotateSpeed={0.5}
+        zoomSpeed={1.2}
         target={[gameState.camera.x, 0, gameState.camera.y]}
+        makeDefault
       />
+      
+      {/* Post-processing */}
+      <EffectComposer>
+        <Bloom 
+          intensity={0.3}
+          luminanceThreshold={0.8}
+          luminanceSmoothing={0.9}
+          mipmapBlur
+        />
+        <Vignette 
+          offset={0.3}
+          darkness={0.5}
+        />
+        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+      </EffectComposer>
     </>
   );
 }
@@ -113,9 +187,15 @@ export function GameScene(props: GameSceneProps) {
   return (
     <Canvas
       shadows
-      camera={{ position: [30, 25, 30], fov: 50, near: 0.1, far: 500 }}
+      camera={{ position: [25, 20, 25], fov: 45, near: 0.1, far: 500 }}
       style={{ width: '100%', height: '100%' }}
-      gl={{ antialias: true, alpha: false }}
+      gl={{ 
+        antialias: true, 
+        alpha: false,
+        powerPreference: 'high-performance',
+        stencil: false,
+      }}
+      dpr={[1, 2]}
     >
       <color attach="background" args={['#87CEEB']} />
       <SceneContent {...props} />
